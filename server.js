@@ -10,22 +10,69 @@ app.use(cors());
 let browser;
 (async () => {
   browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
+    args: [
+      ...chromium.args,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+    ],
+    defaultViewport: { width: 1280, height: 800 },
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath(),
     headless: chromium.headless,
   });
   console.log('Browser ready');
 })();
 
+// ── Create a stealth page ──────────────────────────────────────────────────
+async function newStealthPage() {
+  const page = await browser.newPage();
+
+  await page.setUserAgent(
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+  );
+
+  await page.setExtraHTTPHeaders({
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+  });
+
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    window.chrome = { runtime: {} };
+  });
+
+  return page;
+}
+
 // ── Helper: fetch fully-rendered HTML + all img srcs via browser ───────────
 async function fetchRenderedHtml(permitId) {
   const url = `https://ilp.mizoram.gov.in/pass-verification/${permitId}`;
-  const page = await browser.newPage();
+  const page = await newStealthPage();
   try {
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    // Visit homepage first to pick up session cookies
+    await page.goto('https://ilp.mizoram.gov.in/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Now navigate to the permit page
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     await page.waitForSelector('body', { timeout: 10000 });
+
+    await new Promise(r => setTimeout(r, 2000));
 
     const imgSrcs = await page.evaluate(() =>
       Array.from(document.querySelectorAll('img')).map(img => img.src)
@@ -40,14 +87,14 @@ async function fetchRenderedHtml(permitId) {
 
 // ── Fetch image as base64 using the browser's session cookies ─────────────
 async function fetchImageAsBase64(imageUrl) {
-  const page = await browser.newPage();
+  const page = await newStealthPage();
   try {
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-
     await page.goto('https://ilp.mizoram.gov.in/', {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
     });
+
+    await new Promise(r => setTimeout(r, 1000));
 
     const result = await page.evaluate(async (url) => {
       try {
