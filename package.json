@@ -4,7 +4,8 @@
   "description": "ILP proxy server for Mizoram Digital Tourism",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "npx puppeteer browsers install chrome"
   },
   "keywords": [],
   "author": "",
