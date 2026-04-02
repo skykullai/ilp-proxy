@@ -5,24 +5,20 @@ const puppeteer = require('puppeteer');
 const app = express();
 app.use(cors());
 
-// ── Proxy config (Webshare - Japan) ───────────────────────────────────────
-const PROXY_HOST = '142.111.67.146';
-const PROXY_PORT = '5611';
-const PROXY_USER = 'idqtopae';
-const PROXY_PASS = 'dsab0ddrz6aj';
-
-// ── Launch a single shared browser instance with proxy ────────────────────
+// ── Launch a single shared browser instance ────────────────────────────────
 let browser;
 (async () => {
   browser = await puppeteer.launch({
     headless: 'new',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      `--proxy-server=http://${PROXY_HOST}:${PROXY_PORT}`,
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
     ],
   });
-  console.log('Browser ready with proxy');
+  console.log('Browser ready');
 })();
 
 // ── Helper: fetch fully-rendered HTML + all img srcs via browser ───────────
@@ -30,7 +26,6 @@ async function fetchRenderedHtml(permitId) {
   const url = `https://ilp.mizoram.gov.in/pass-verification/${permitId}`;
   const page = await browser.newPage();
   try {
-    await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     await page.waitForSelector('body', { timeout: 10000 });
@@ -50,7 +45,6 @@ async function fetchRenderedHtml(permitId) {
 async function fetchImageAsBase64(imageUrl) {
   const page = await browser.newPage();
   try {
-    await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
     await page.goto('https://ilp.mizoram.gov.in/', {
